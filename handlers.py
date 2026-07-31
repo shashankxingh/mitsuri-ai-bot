@@ -1,0 +1,104 @@
+from telegram import Update
+from telegram.ext import ContextTypes
+from ddgs import DDGS
+import wikipedia
+from config import OWNER_ID, MAIN_GROUP_ID
+from ai_service import get_ai_response
+
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler for /start command"""
+    await update.message.reply_text(
+        "Hii! 💕 Main Mitsuri hoon! Aapka swagat hai. Main aapse baat karne ke liye bahut excited hoon! 🥰"
+    )
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler for /help command"""
+    help_text = (
+        "Mere commands:\n"
+        "/start - Bot ko start karein\n"
+        "/help - Ye message dekhein\n"
+        "/ask <query> - Internet pe kuch dhoondna ho toh!\n"
+        "Bas mujhe message bhejein aur main Hinglish me reply karungi! 💖"
+    )
+    await update.message.reply_text(help_text)
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler for normal text messages to talk to the AI"""
+    if not update.message or not update.message.text:
+        return
+
+    text = update.message.text
+    
+    response = await get_ai_response(text, update.effective_chat.id)
+    await update.message.reply_text(response)
+
+async def ask_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler for /ask command to search the internet"""
+    if not context.args:
+        await update.message.reply_text("Kya dhoondna hai? Please query bhi likho na! Jaise: /ask What is quantum computing 🥺")
+        return
+        
+    query = " ".join(context.args)
+    chat_id = update.effective_chat.id
+    
+    # Send a thinking message
+    thinking_msg = await update.message.reply_text("Ruko main abhi internet pe check karti hoon... 🔍💕")
+    
+    search_context = ""
+    
+    # Try Wikipedia first for factual queries
+    try:
+        wiki_results = wikipedia.search(query, results=1)
+        if wiki_results:
+            summary = wikipedia.summary(wiki_results[0], sentences=3)
+            search_context += f"Wikipedia ({wiki_results[0]}): {summary}\n\n"
+    except Exception as e:
+        print(f"Wiki error: {e}")
+        pass
+
+    # Try DDGS
+    try:
+        results = DDGS().text(query, region='in-en', max_results=3)
+        results_list = list(results)
+            
+        if results_list:
+            search_context += "Web Search:\n" + "\n".join([f"- {r['title']}: {r['body']}" for r in results_list])
+    except Exception as e:
+        print(f"Search error: {e}")
+        pass
+
+    if not search_context:
+        await thinking_msg.edit_text("Arey yaar, internet pe kuch nahi mila iske baare mein... 🥺💔 Please thoda different search karo na!")
+        return
+        
+    prompt = f"Maine internet par ye dhunda for '{query}':\n{search_context}\n\nPlease isko short aur cute Hinglish mein summarize karke batao aur user ko answer do!"
+    
+    try:
+        response = await get_ai_response(prompt, chat_id)
+        await thinking_msg.edit_text(response)
+    except Exception as e:
+        await thinking_msg.edit_text("Oops, mujhe samajh nahi aa raha kya bolun... 🥺💔")
+
+async def owner_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Owner specific command to broadcast a message in the main group."""
+    if update.effective_user.id != OWNER_ID:
+        await update.message.reply_text("Hehe, sorry but ye command sirf mere Owner ke liye hai! 🥺")
+        return
+
+    if not context.args:
+        await update.message.reply_text("Arey, message toh likho jo broadcast karna hai! 😅")
+        return
+        
+    message = " ".join(context.args)
+    try:
+        await context.bot.send_message(chat_id=MAIN_GROUP_ID, text=f"📢 Announcement:\n\n{message}")
+        await update.message.reply_text("Message successfully main group mein bhej diya gaya! 💖")
+    except Exception as e:
+        await update.message.reply_text(f"Oops, error aa gaya: {e} 💔")
+
+async def owner_ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Owner command to check if bot is alive in main group"""
+    if update.effective_user.id != OWNER_ID:
+        return
+        
+    await update.message.reply_text("Haan owner ji, main bilkul ready aur active hoon! 💖")
