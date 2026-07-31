@@ -32,6 +32,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     text = update.message.text
+    user_name = update.message.from_user.first_name if update.message.from_user else "Someone"
+    
     chat_type = update.effective_chat.type
     
     # If in a group, only respond if mentioned or replied to
@@ -45,8 +47,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if not (is_mentioned or is_reply_to_bot):
             return # Ignore message if not targeted at bot
+            
+    # Prepend user name so AI knows who is speaking
+    prompt_with_context = f"[{user_name}]: {text}"
     
-    response = await get_ai_response(text, update.effective_chat.id)
+    response = await get_ai_response(prompt_with_context, update.effective_chat.id)
     await update.message.reply_text(response)
 
 async def ask_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -88,7 +93,8 @@ async def ask_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await thinking_msg.edit_text("Arey yaar, internet pe kuch nahi mila iske baare mein... 🥺💔 Please thoda different search karo na!")
         return
         
-    prompt = f"Maine internet par ye dhunda for '{query}':\n{search_context}\n\nPlease isko short aur cute Hinglish mein summarize karke batao aur user ko answer do!"
+    user_name = update.message.from_user.first_name if update.message.from_user else "Someone"
+    prompt = f"[{user_name}]: Maine internet par ye dhunda for '{query}':\n{search_context}\n\nPlease isko short aur cute Hinglish mein summarize karke batao aur user ko answer do!"
     
     try:
         response = await get_ai_response(prompt, chat_id)
