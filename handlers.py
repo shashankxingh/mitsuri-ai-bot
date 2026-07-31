@@ -2,10 +2,13 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from ddgs import DDGS
 import wikipedia
+import time
 from config import OWNER_ID, MAIN_GROUP_ID
 from ai_service import get_ai_response
 
 BOT_ALIVE = True
+user_cooldowns = {}
+COOLDOWN_SECONDS = 3
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for /start command"""
@@ -32,6 +35,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     if not update.message or not update.message.text:
         return
+        
+    user_id = update.effective_user.id if update.effective_user else 0
+    current_time = time.time()
+    
+    # 3 second cooldown per user to prevent spam
+    if user_id in user_cooldowns and current_time - user_cooldowns[user_id] < COOLDOWN_SECONDS:
+        return
+    user_cooldowns[user_id] = current_time
 
     # Ignore messages sent by other bots to prevent infinite bot-to-bot loops
     if update.message.from_user and update.message.from_user.is_bot:
@@ -65,6 +76,15 @@ async def ask_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text("Kya dhoondna hai? Please query bhi likho na! Jaise: /ask What is quantum computing 🥺")
         return
+        
+    user_id = update.effective_user.id if update.effective_user else 0
+    current_time = time.time()
+    
+    # 5 second cooldown for heavy /ask command
+    if user_id in user_cooldowns and current_time - user_cooldowns[user_id] < 5:
+        await update.message.reply_text("Arey thoda slow type karo na! Ek minute ruko please... 🥺")
+        return
+    user_cooldowns[user_id] = current_time
         
     query = " ".join(context.args)
     chat_id = update.effective_chat.id
