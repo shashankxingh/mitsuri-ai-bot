@@ -27,6 +27,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
 
+    # Ignore messages sent by other bots to prevent infinite bot-to-bot loops
+    if update.message.from_user and update.message.from_user.is_bot:
+        return
+
     text = update.message.text
     chat_type = update.effective_chat.type
     
