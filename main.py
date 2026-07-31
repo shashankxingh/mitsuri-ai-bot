@@ -5,7 +5,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from config import TELEGRAM_BOT_TOKEN
-from handlers import start_command, help_command, handle_message, owner_broadcast, owner_ping, ask_command
+from handlers import start_command, help_command, handle_message, owner_broadcast, owner_ping, ask_command, sleep_command, wake_command
 
 # Set up logging
 logging.basicConfig(
@@ -46,8 +46,10 @@ def main():
     application.add_handler(CommandHandler("ask", ask_command))
 
     # Owner commands
-    application.add_handler(CommandHandler("broadcast", owner_broadcast))
+    application.add_handler(CommandHandler("cast", owner_broadcast))
     application.add_handler(CommandHandler("ping", owner_ping))
+    application.add_handler(CommandHandler("sleep", sleep_command))
+    application.add_handler(CommandHandler("wake", wake_command))
 
     # Message handler for AI chat
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))

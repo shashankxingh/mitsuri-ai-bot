@@ -5,6 +5,8 @@ import wikipedia
 from config import OWNER_ID, MAIN_GROUP_ID
 from ai_service import get_ai_response
 
+BOT_ALIVE = True
+
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for /start command"""
     await update.message.reply_text(
@@ -24,6 +26,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for normal text messages to talk to the AI"""
+    global BOT_ALIVE
+    if not BOT_ALIVE:
+        return
+        
     if not update.message or not update.message.text:
         return
 
@@ -104,8 +110,8 @@ async def ask_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def owner_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Owner specific command to broadcast a message in the main group."""
-    if update.effective_user.id != OWNER_ID:
-        await update.message.reply_text("Hehe, sorry but ye command sirf mere Owner ke liye hai! 🥺")
+    if update.effective_user.id != OWNER_ID or update.effective_chat.id != MAIN_GROUP_ID:
+        await update.message.reply_text("Hehe, sorry but ye command sirf mere Owner ke liye aur is group ke liye hai! 🥺")
         return
 
     if not context.args:
@@ -125,3 +131,19 @@ async def owner_ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
         
     await update.message.reply_text("Haan owner ji, main bilkul ready aur active hoon! 💖")
+
+async def sleep_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Owner command to put bot to sleep"""
+    global BOT_ALIVE
+    if update.effective_user.id != OWNER_ID or update.effective_chat.id != MAIN_GROUP_ID:
+        return
+    BOT_ALIVE = False
+    await update.message.reply_text("Theek hai owner ji, main thodi der so jaati hoon... 😴💤 (Bot is now asleep)")
+
+async def wake_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Owner command to wake bot up"""
+    global BOT_ALIVE
+    if update.effective_user.id != OWNER_ID or update.effective_chat.id != MAIN_GROUP_ID:
+        return
+    BOT_ALIVE = True
+    await update.message.reply_text("Yay! Main uth gayi aur bilkul ready hoon! 🥰💖 (Bot is now awake)")
