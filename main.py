@@ -21,7 +21,7 @@ class DummyHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-type','text/plain')
         self.end_headers()
-        self.wfile.write(b"Mitsuri Bot is running! 💕")
+        self.wfile.write("Mitsuri Bot is running! 💕".encode('utf-8'))
 
 def run_dummy_server():
     port = int(os.environ.get("PORT", 8080))

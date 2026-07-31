@@ -28,6 +28,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     text = update.message.text
+    chat_type = update.effective_chat.type
+    
+    # If in a group, only respond if mentioned or replied to
+    if chat_type in ["group", "supergroup"]:
+        is_mentioned = "mitsuri" in text.lower() or "@mitsuri_1bot" in text.lower()
+        is_reply_to_bot = (
+            update.message.reply_to_message 
+            and update.message.reply_to_message.from_user 
+            and update.message.reply_to_message.from_user.id == context.bot.id
+        )
+        
+        if not (is_mentioned or is_reply_to_bot):
+            return # Ignore message if not targeted at bot
     
     response = await get_ai_response(text, update.effective_chat.id)
     await update.message.reply_text(response)
