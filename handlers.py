@@ -4,9 +4,10 @@ import time
 
 import wikipedia
 from ddgs import DDGS
-from telegram import Update
+from telegram import Update, ChatMemberUpdated
 from telegram.ext import ContextTypes
 
+import db
 from ai_service import get_ai_response
 from config import MAIN_GROUP_ID, OWNER_ID
 
@@ -21,6 +22,44 @@ ask_cooldowns: dict[int, float] = {}
 
 MESSAGE_COOLDOWN_SECONDS = 3
 ASK_COOLDOWN_SECONDS = 5
+
+# Once we've confirmed a user/group is already in Mongo (or just inserted
+# them), remember it in-process so we don't re-query the DB on every
+# single message — only the first message per user/group per process
+# needs the round trip.
+_known_user_ids: set[int] = set()
+_known_group_ids: set[int] = set()
+
+
+async def _ensure_user_registered(user, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Back-fill a user into Mongo the first time we see them in THIS
+    process, whether that's via /start or just a normal message — covers
+    people who were already using the bot before the DB existed. Announces
+    to the main group only on a genuine first-ever insert."""
+    if not user or user.id in _known_user_ids:
+        return
+    _known_user_ids.add(user.id)
+
+    is_new = await db.register_user_if_new(user.id, user.username, user.first_name)
+    if is_new:
+        try:
+            await context.bot.send_message(
+                chat_id=MAIN_GROUP_ID,
+                text=f"🎉 {user.first_name} ne abhi mujhe start kiya hai! Welcome unko group mein! 💖",
+            )
+        except Exception as e:
+            logger.warning("Could not send new-user announcement to main group: %s", e)
+
+
+async def _ensure_group_registered(chat) -> None:
+    """Back-fill a group into Mongo the first time we see a message from it
+    in THIS process — covers groups the bot was already sitting in before
+    the DB existed. Silent: no intro message, since the bot's already
+    active there and re-introducing itself would look broken/spammy."""
+    if chat.type not in ("group", "supergroup") or chat.id in _known_group_ids:
+        return
+    _known_group_ids.add(chat.id)
+    await db.register_group_if_new(chat.id, chat.title)
 
 # How often (in seconds) to sweep stale cooldown entries so the dicts
 # don't grow forever over a long-running process.
@@ -52,10 +91,13 @@ def _is_on_cooldown(cooldown_dict: dict, user_id: int, seconds: int) -> bool:
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handler for /start command"""
+    """Handler for /start command. On a user's genuine first appearance
+    ever (via /start OR any message), saves them to MongoDB and announces
+    it in the main group — but only ever once per person."""
     await update.message.reply_text(
         "Hii! 💕 Main Mitsuri hoon! Aapka swagat hai. Main aapse baat karne ke liye bahut excited hoon! 🥰"
     )
+    await _ensure_user_registered(update.effective_user, context)
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -82,6 +124,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Ignore messages sent by other bots to prevent infinite bot-to-bot loops
     if update.message.from_user and update.message.from_user.is_bot:
         return
+
+    await _ensure_user_registered(update.effective_user, context)
+    await _ensure_group_registered(update.effective_chat)
 
     user_id = update.effective_user.id if update.effective_user else 0
 
@@ -117,8 +162,44 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(response)
 
 
+async def on_bot_added_to_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Fires whenever the bot's own membership status changes in a chat
+    (added, removed, promoted, etc). We only care about the transition
+    into being a member of a group for the first time."""
+    result: ChatMemberUpdated = update.my_chat_member
+    if result is None:
+        return
+
+    old_status = result.old_chat_member.status
+    new_status = result.new_chat_member.status
+
+    was_in_chat = old_status in ("member", "administrator", "creator")
+    is_in_chat_now = new_status in ("member", "administrator", "creator")
+
+    if was_in_chat or not is_in_chat_now:
+        return  # not a fresh "bot just joined" transition
+
+    chat = result.chat
+    if chat.type not in ("group", "supergroup"):
+        return
+
+    is_new = await db.register_group_if_new(chat.id, chat.title)
+    _known_group_ids.add(chat.id)
+    if is_new:
+        try:
+            await context.bot.send_message(
+                chat_id=chat.id,
+                text="Hii everyone! 💕 Main Mitsuri hoon! Mujhe mention karke ya reply karke baat karo, main hamesha ready hoon! 🥰",
+            )
+        except Exception as e:
+            logger.warning("Could not send intro message to new group %s: %s", chat.id, e)
+
+
 async def ask_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for /ask command to search the internet"""
+    await _ensure_user_registered(update.effective_user, context)
+    await _ensure_group_registered(update.effective_chat)
+
     if not context.args:
         await update.message.reply_text(
             "Kya dhoondna hai? Please query bhi likho na! Jaise: /ask What is quantum computing 🥺"
@@ -196,13 +277,20 @@ def _is_owner(update: Update) -> bool:
 
 
 async def owner_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Owner command to broadcast a message into the main group.
-
-    Callable from anywhere (DM included) as long as it's the owner —
-    it always TARGETS MAIN_GROUP_ID, it doesn't need to be RUN there.
+    """Owner command to broadcast a message to every user who has ever
+    /start'd the bot AND every group the bot has ever been added to.
+    Can only be TRIGGERED from the main group or the owner's own DM —
+    but the message goes out to everyone/everywhere saved, not just
+    whoever's in the triggering chat.
     """
     if not _is_owner(update):
         await update.message.reply_text("Hehe, sorry but ye command sirf mere Owner ke liye hai! 🥺")
+        return
+
+    chat = update.effective_chat
+    allowed_here = chat.id == MAIN_GROUP_ID or chat.type == "private"
+    if not allowed_here:
+        await update.message.reply_text("Ye command sirf main group ya humari DM se chalta hai! 😅")
         return
 
     if not context.args:
@@ -210,12 +298,33 @@ async def owner_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     message = " ".join(context.args)
-    try:
-        await context.bot.send_message(chat_id=MAIN_GROUP_ID, text=f"📢 Announcement:\n\n{message}")
-        await update.message.reply_text("Message successfully main group mein bhej diya gaya! 💖")
-    except Exception as e:
-        logger.error("Broadcast failed: %s", e)
-        await update.message.reply_text(f"Oops, error aa gaya: {e} 💔")
+    text = f"📢 Announcement:\n\n{message}"
+
+    user_ids = await db.get_all_user_ids()
+    group_ids = await db.get_all_group_ids()
+    targets = [(uid, "user") for uid in user_ids] + [(gid, "group") for gid in group_ids]
+
+    if not targets:
+        await update.message.reply_text("Abhi tak koi bhi user ya group database mein nahi hai broadcast karne ke liye! 🥺")
+        return
+
+    status_msg = await update.message.reply_text(f"Bhej rahi hoon {len(user_ids)} users aur {len(group_ids)} groups ko... ⏳")
+
+    sent = 0
+    failed = 0
+    # Telegram enforces a rough ~30 msg/sec global limit. A small delay
+    # between sends keeps us comfortably under that instead of getting
+    # flood-limited partway through a big broadcast.
+    for chat_id, _kind in targets:
+        try:
+            await context.bot.send_message(chat_id=chat_id, text=text)
+            sent += 1
+        except Exception as e:
+            failed += 1
+            logger.warning("Broadcast to %s failed: %s", chat_id, e)
+        await asyncio.sleep(0.05)
+
+    await status_msg.edit_text(f"Ho gaya! ✅ {sent} ko mil gaya, {failed} fail ho gaye (blocked/kicked honge). 💖")
 
 
 async def owner_ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
