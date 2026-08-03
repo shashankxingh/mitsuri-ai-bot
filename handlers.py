@@ -222,7 +222,10 @@ async def owner_ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Owner command to check if bot is alive"""
     if not _is_owner(update):
         return
-    await update.message.reply_text("Haan owner ji, main bilkul ready aur active hoon! 💖")
+    if BOT_ALIVE:
+        await update.message.reply_text("Haan owner ji, main bilkul ready aur active hoon! 💖")
+    else:
+        await update.message.reply_text("Owner ji, process toh chal raha hai, par main abhi so rahi hoon (asleep). /on karke jagao mujhe! 😴")
 
 
 async def sleep_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
