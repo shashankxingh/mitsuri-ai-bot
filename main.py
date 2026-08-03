@@ -3,7 +3,7 @@ import os
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, ChatMemberHandler, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, ChatMemberHandler, CallbackQueryHandler, filters
 from config import TELEGRAM_BOT_TOKEN
 from handlers import (
     start_command,
@@ -17,6 +17,8 @@ from handlers import (
     on_command,
     off_command,
     on_bot_added_to_group,
+    access_command,
+    access_callback,
 )
 
 # Set up logging
@@ -70,6 +72,9 @@ def main():
 
     # Fires when the bot's own membership in a chat changes (e.g. added to a group)
     application.add_handler(ChatMemberHandler(on_bot_added_to_group, ChatMemberHandler.MY_CHAT_MEMBER))
+
+    application.add_handler(CommandHandler("access", access_command))
+    application.add_handler(CallbackQueryHandler(access_callback, pattern="^access_"))
 
     # Run the bot
     logger.info("Mitsuri bot is starting... 💕")
