@@ -4,7 +4,7 @@ import time
 
 import wikipedia
 from ddgs import DDGS
-from telegram import Update, ChatMemberUpdated
+from telegram import Update, ChatMemberUpdated, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 import db
@@ -274,6 +274,88 @@ async def ask_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def _is_owner(update: Update) -> bool:
     return bool(update.effective_user) and update.effective_user.id == OWNER_ID
+
+
+# Telegram messages are capped at 4096 chars — split long lists into
+# multiple messages instead of silently failing on a big user/group base.
+TELEGRAM_MSG_LIMIT = 4096
+
+
+def _chunk_lines(lines: list[str], header: str) -> list[str]:
+    chunks = []
+    current = header
+    for line in lines:
+        if len(current) + len(line) + 1 > TELEGRAM_MSG_LIMIT:
+            chunks.append(current)
+            current = ""
+        current += line + "\n"
+    if current.strip():
+        chunks.append(current)
+    return chunks
+
+
+async def access_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Owner command: shows Users/Groups buttons, tapping one lists every
+    saved user or group with a clickable link to reach them."""
+    if not _is_owner(update):
+        await update.message.reply_text("Ye command sirf mere Owner ke liye hai! 🥺")
+        return
+
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("👤 Users", callback_data="access_users"),
+                InlineKeyboardButton("👥 Groups", callback_data="access_groups"),
+            ]
+        ]
+    )
+    await update.message.reply_text("Kya dekhna hai owner ji? 💖", reply_markup=keyboard)
+
+
+async def access_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles the Users/Groups button taps from /access."""
+    query = update.callback_query
+    await query.answer()
+
+    if not query.from_user or query.from_user.id != OWNER_ID:
+        await query.edit_message_text("Ye sirf Owner ke liye hai! 🥺")
+        return
+
+    if query.data == "access_users":
+        users = await db.get_all_users_full()
+        if not users:
+            await query.edit_message_text("Abhi tak koi bhi user database mein nahi hai. 🥺")
+            return
+        lines = []
+        for i, u in enumerate(users, 1):
+            name = u.get("first_name") or "Unknown"
+            username = u.get("username")
+            link = f"https://t.me/{username}" if username else f"tg://user?id={u['_id']}"
+            lines.append(f"{i}. {name} — {link}")
+        chunks = _chunk_lines(lines, f"👤 Total users: {len(users)}\n\n")
+        await query.edit_message_text(chunks[0])
+        for chunk in chunks[1:]:
+            await context.bot.send_message(chat_id=query.message.chat_id, text=chunk)
+
+    elif query.data == "access_groups":
+        groups = await db.get_all_groups_full()
+        if not groups:
+            await query.edit_message_text("Abhi tak koi bhi group database mein nahi hai. 🥺")
+            return
+        lines = []
+        for i, g in enumerate(groups, 1):
+            title = g.get("title") or "Untitled group"
+            chat_id = g["_id"]
+            try:
+                invite_link = await context.bot.export_chat_invite_link(chat_id)
+                lines.append(f"{i}. {title} — {invite_link}")
+            except Exception as e:
+                logger.warning("Could not export invite link for group %s: %s", chat_id, e)
+                lines.append(f"{i}. {title} — (no link, chat_id: {chat_id})")
+        chunks = _chunk_lines(lines, f"👥 Total groups: {len(groups)}\n\n")
+        await query.edit_message_text(chunks[0])
+        for chunk in chunks[1:]:
+            await context.bot.send_message(chat_id=query.message.chat_id, text=chunk)
 
 
 async def owner_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
