@@ -3,3 +3,4 @@ groq>=0.4.0
 python-dotenv>=1.0.0
 ddgs>=9.14.0
 wikipedia>=1.4.0
+motor>=3.3.0
