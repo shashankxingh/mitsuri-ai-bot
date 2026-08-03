@@ -90,3 +90,26 @@ async def get_all_group_ids() -> list[int]:
     except Exception as e:
         logger.error("Mongo error fetching group list: %s", e)
         return []
+
+
+async def get_all_users_full() -> list[dict]:
+    """Full user records (id, username, first_name) — used by /access to
+    build clickable links for each saved user."""
+    if users_col is None:
+        return []
+    try:
+        return [doc async for doc in users_col.find({}, {"_id": 1, "username": 1, "first_name": 1})]
+    except Exception as e:
+        logger.error("Mongo error fetching full user list: %s", e)
+        return []
+
+
+async def get_all_groups_full() -> list[dict]:
+    """Full group records (id, title) — used by /access to build links."""
+    if groups_col is None:
+        return []
+    try:
+        return [doc async for doc in groups_col.find({}, {"_id": 1, "title": 1})]
+    except Exception as e:
+        logger.error("Mongo error fetching full group list: %s", e)
+        return []
