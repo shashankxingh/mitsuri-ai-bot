@@ -3,7 +3,7 @@ import os
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, ChatMemberHandler, filters
 from config import TELEGRAM_BOT_TOKEN
 from handlers import (
     start_command,
@@ -16,6 +16,7 @@ from handlers import (
     wake_command,
     on_command,
     off_command,
+    on_bot_added_to_group,
 )
 
 # Set up logging
@@ -66,6 +67,9 @@ def main():
 
     # Message handler for AI chat
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    # Fires when the bot's own membership in a chat changes (e.g. added to a group)
+    application.add_handler(ChatMemberHandler(on_bot_added_to_group, ChatMemberHandler.MY_CHAT_MEMBER))
 
     # Run the bot
     logger.info("Mitsuri bot is starting... 💕")
