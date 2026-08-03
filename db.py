@@ -78,3 +78,15 @@ async def get_all_user_ids() -> list[int]:
     except Exception as e:
         logger.error("Mongo error fetching user list: %s", e)
         return []
+
+
+async def get_all_group_ids() -> list[int]:
+    """All group chat IDs the bot has ever been added to — used by /cast
+    to also broadcast into groups, not just user DMs."""
+    if groups_col is None:
+        return []
+    try:
+        return [doc["_id"] async for doc in groups_col.find({}, {"_id": 1})]
+    except Exception as e:
+        logger.error("Mongo error fetching group list: %s", e)
+        return []
