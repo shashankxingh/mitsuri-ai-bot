@@ -113,7 +113,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Prepend user name so AI knows who is speaking
     prompt_with_context = f"[{user_name}]: {text}"
 
-    response = await get_ai_response(prompt_with_context, update.effective_chat.id)
+    response = await get_ai_response(prompt_with_context, update.effective_chat.id, user_name)
     await update.message.reply_text(response)
 
 
@@ -184,7 +184,7 @@ async def ask_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     try:
-        response = await get_ai_response(prompt, chat_id)
+        response = await get_ai_response(prompt, chat_id, user_name)
         await thinking_msg.edit_text(response)
     except Exception as e:
         logger.error("AI response failed for /ask: %s", e)
