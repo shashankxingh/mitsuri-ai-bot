@@ -419,7 +419,7 @@ async def owner_ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Owner ji, process toh chal raha hai, par main abhi so rahi hoon (asleep). /on karke jagao mujhe! 😴")
 
 
-async def sleep_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def off_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Owner command to put the bot to sleep. Callable from anywhere."""
     global BOT_ALIVE
     if not _is_owner(update):
@@ -428,16 +428,10 @@ async def sleep_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Theek hai owner ji, main thodi der so jaati hoon... 😴💤 (Bot is now asleep)")
 
 
-async def wake_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def on_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Owner command to wake the bot up. Callable from anywhere."""
     global BOT_ALIVE
     if not _is_owner(update):
         return
     BOT_ALIVE = True
     await update.message.reply_text("Yay! Main uth gayi aur bilkul ready hoon! 🥰💖 (Bot is now awake)")
-
-
-# Aliases: you were calling /on and /off, which never existed as
-# registered commands before — that's why they silently did nothing.
-on_command = wake_command
-off_command = sleep_command
