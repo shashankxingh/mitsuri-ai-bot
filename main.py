@@ -12,8 +12,6 @@ from handlers import (
     owner_broadcast,
     owner_ping,
     ask_command,
-    sleep_command,
-    wake_command,
     on_command,
     off_command,
     on_bot_added_to_group,
@@ -62,8 +60,6 @@ def main():
     # Owner commands
     application.add_handler(CommandHandler("cast", owner_broadcast))
     application.add_handler(CommandHandler("ping", owner_ping))
-    application.add_handler(CommandHandler("sleep", sleep_command))
-    application.add_handler(CommandHandler("wake", wake_command))
     application.add_handler(CommandHandler("on", on_command))
     application.add_handler(CommandHandler("off", off_command))
 
